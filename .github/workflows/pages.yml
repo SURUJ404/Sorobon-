@@ -1,0 +1,79 @@
+name: pages
+
+# Build the interactive web demo and deploy it to GitHub Pages.
+#
+# Pages is served from the `gh-pages` BRANCH (Settings -> Pages -> Deploy from
+# a branch): this job pushes the built site to the branch root, and
+# pr-preview.yml deploys per-PR previews under pr-preview/pr-<n>/ on the same
+# branch (cleaned up when the PR closes). `clean-exclude` keeps previews alive
+# across production deploys.
+#
+# Project pages live under /soroban-sim/, so the Vite build runs with
+# PAGES_BASE=/soroban-sim/ (the `build:pages` script) — dev + Playwright keep
+# base "/". The jco-generated component (./generated, gitignored) is produced
+# fresh here via build:component + build:jco. The committed fixture .wasm files
+# are the reproducibility anchor, so build:fixture-contracts is deliberately NOT
+# run.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "crates/**"
+      - "wit/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Serialize pushes to the gh-pages branch with the preview workflow.
+concurrency:
+  group: gh-pages-branch
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.11.0
+          run_install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Materialize packages/soroban-sim/src/generated (component + jco bindings).
+      - name: Build component wasm
+        run: pnpm run build:component
+
+      - name: Transpile with jco
+        run: pnpm run build:jco
+
+      # Vite build under the Pages base path; emits dist/ incl. core.wasm asset.
+      - name: Build web demo
+        run: pnpm --filter soroban-sim-web-demo run build:pages
+
+      - name: Disable Jekyll
+        run: touch packages/web-demo/dist/.nojekyll
+
+      - name: Deploy to gh-pages (preserve PR previews)
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: packages/web-demo/dist
+          branch: gh-pages
+          clean: true
+          clean-exclude: pr-preview
+          commit-message: "deploy: ${{ github.sha }}"

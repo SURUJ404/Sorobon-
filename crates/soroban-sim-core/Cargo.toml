@@ -1,0 +1,31 @@
+[package]
+name = "soroban-sim-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+
+description = "Portable Soroban simulation and forked network sessions"
+
+[dependencies]
+anyhow.workspace = true
+ed25519-dalek.workspace = true
+p256.workspace = true
+sha2.workspace = true
+soroban-env-host = { workspace = true, features = ["recording_mode"] }
+soroban-env-host-apply = { workspace = true, optional = true }
+soroban-simulation.workspace = true
+stellar-strkey.workspace = true
+
+[features]
+default = ["exact-apply"]
+# Apply session transactions with a host built without `recording_mode`, so
+# CPU metering matches stellar-core exactly (see the workspace manifest).
+exact-apply = ["dep:soroban-env-host-apply"]
+
+[dev-dependencies]
+base64 = "0.22"
+hex = "0.4.3"
+serde_json = "1"
